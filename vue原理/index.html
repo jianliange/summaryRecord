@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document</title>
+</head>
+<style>
+  .red{
+    color:red;
+  }
+</style>
+<body>
+  <div id="app">
+    <div>我的名字是{{person.name}},{{person.age}}岁</div>
+    <ul>
+      <li>1</li>
+      <li>2</li>
+      <li>3</li>
+    </ul>
+    <div>{{msg}}</div>
+    <div v-bind:class='redClass'>我是v-bind，红色</div>
+    <div :class='redClass'>我是v-bind，红色</div>
+    <div v-text="msg"></div>
+    <input type="text" v-model="msg"/>
+    <button v-on:click="changeMsg">v-on点我改变msg</button>
+    <button @click="changeMsg">@点我改变msg</button>
+
+  </div>
+</body>
+<script type="text/javascript" src="./myvue.js"></script>
+<script>
+const vm = new MyVue({
+  el:'#app',
+  data:{
+    person:{
+      name:'张三',
+      age:'18'
+    },
+    msg:'Hello world',
+    redClass:'red'
+  },
+  methods:{
+    changeMsg(){
+      console.log('Hello world!!!');
+    }
+  }
+})
+</script>
+</html>
