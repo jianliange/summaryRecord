@@ -14,16 +14,25 @@ const compileUtil = {
       // console.log('expr: ' + expr);
       value = expr.replace(/\{\{(.+?)\}\}/g,(...args)=> {
         // console.log('args',args);
+        new Watch(args[1],vm ,(newVal)=>{
+          this.updater.modelUpdate(node,newVal)
+        })
         return this.getVal(args[1],vm)
       });
     } else {
       // v-text 因为有些表达式是 person.name形式，所以得遍历获取值
       value = this.getVal(expr,vm) 
+      new Watch(expr,vm ,(newVal)=>{
+        this.updater.modelUpdate(node,newVal)
+      })
     }
     this.updater.textUpdate(node,value)
   },
   model(node, expr, vm) {
     const value = this.getVal(expr,vm)
+    new Watch(expr,vm ,(newVal)=>{
+      this.updater.modelUpdate(node,newVal)
+    })
     this.updater.modelUpdate(node,value)
   },
   on(node, expr, vm, eventName) {
@@ -32,6 +41,9 @@ const compileUtil = {
   },
   bind(node, expr, vm, eventName) {
     let value = this.getVal(expr,vm)
+    new Watch(expr,vm ,(newVal)=>{
+      this.updater.modelUpdate(node,newVal)
+    })
     node.setAttribute(eventName, value)
   },
   // 更新函数
@@ -138,7 +150,7 @@ class MyVue {
     this.$options = options;
     if (this.$el) {
       //1.实现一个数据的观察者
-
+      new Observer(this.$data)
       //2.实现一个指令解析器
       new Compile(this.$el,this)
     }
