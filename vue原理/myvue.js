@@ -7,6 +7,15 @@ const compileUtil = {
       return data[currentVal];
     }, vm.$data);
   },
+  setVal(expr, vm,inputVal) {
+    return expr.split('.').reduce((data, currentVal) => {
+      
+      // console.log('data', data);
+      // console.log('currentVal', currentVal);
+      // console.log('data[currentVal]',data[currentVal]);
+      data[currentVal] = inputVal
+    }, vm.$data);
+  },
   text(node, expr, vm) {
     let value
     //处理文本节点
@@ -15,7 +24,7 @@ const compileUtil = {
       value = expr.replace(/\{\{(.+?)\}\}/g,(...args)=> {
         // console.log('args',args);
         new Watch(args[1],vm ,(newVal)=>{
-          this.updater.modelUpdate(node,newVal)
+          this.updater.textUpdate(node,newVal)
         })
         return this.getVal(args[1],vm)
       });
@@ -23,16 +32,21 @@ const compileUtil = {
       // v-text 因为有些表达式是 person.name形式，所以得遍历获取值
       value = this.getVal(expr,vm) 
       new Watch(expr,vm ,(newVal)=>{
-        this.updater.modelUpdate(node,newVal)
+        this.updater.textUpdate(node,newVal)
       })
     }
     this.updater.textUpdate(node,value)
   },
   model(node, expr, vm) {
     const value = this.getVal(expr,vm)
+    // 绑定更新函数，数据=》视图
     new Watch(expr,vm ,(newVal)=>{
       this.updater.modelUpdate(node,newVal)
     })
+    // 视图=》数据=》视图
+    node.addEventListener('input',(e)=>{      
+      this.setVal(expr,vm,e.target.value)
+    })    
     this.updater.modelUpdate(node,value)
   },
   on(node, expr, vm, eventName) {
@@ -153,6 +167,20 @@ class MyVue {
       new Observer(this.$data)
       //2.实现一个指令解析器
       new Compile(this.$el,this)
+      //实现代理
+      this.proxyData(this.$data)
+    }
+  }
+  proxyData(data){
+    for(const key in data){
+      Object.defineProperty(this,key,{
+        get(){
+          return data[key]
+        },
+        set(newVal){
+          data[key] = newVal
+        }
+      })
     }
   }
 }
