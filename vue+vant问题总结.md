@@ -72,37 +72,55 @@ accept=".jpg,.jpeg" 改为 accept="image/jpg,image/jpeg"
 </van-field>
 ```
 ## beforeRead
-- 调用Compressor：解决拍照上传的图片被旋转 90 度
+- 调用Compressor：解决部分安卓手机拍照上传的图片被旋转 90 度
 ```js
-beforeRead (file) {
-  return new Promise((resolve, reject) => {
-    if (file instanceof Array) {
-      for (let i = 0; i < file.length; i++) {
-        if (file[i].type !== 'image/jpeg' && file[i].type !== 'image/jpg') {
-          this.$toast.fail('请上传 jpg、jpeg 格式图片')
-          reject()
+    beforeRead (file) {
+      if (this.phoneType === 'ios') {
+        if (file instanceof Array) {
+          for (let i = 0; i < file.length; i++) {
+            if (file[i].type !== 'image/jpeg' && file[i].type !== 'image/jpg') {
+              this.$toast.fail('请上传 jpg、jpeg 格式图片')
+              return false
+            }
+            return true
+          }
+        } else {
+          if (file.type !== 'image/jpeg' && file.type !== 'image/jpg') {
+            this.$toast.fail('请上传 jpg、jpeg 格式图片')
+            return false
+          }
+          return true
         }
-        new Compressor(file, {
-          success: resolve,
-          error (err) {
-            console.log(err.message)
+      } else {
+        return new Promise((resolve, reject) => {
+          if (file instanceof Array) {
+            for (let i = 0; i < file.length; i++) {
+              if (file[i].type !== 'image/jpeg' && file[i].type !== 'image/jpg') {
+                this.$toast.fail('请上传 jpg、jpeg 格式图片')
+                reject()
+              }
+              new Compressor(file, {
+                success: resolve,
+                error (err) {
+                  console.log(err.message)
+                }
+              })
+            }
+          } else {
+            if (file.type !== 'image/jpeg' && file.type !== 'image/jpg') {
+              this.$toast.fail('请上传 jpg、jpeg 格式图片')
+              reject()
+            }
+            new Compressor(file, {
+              success: resolve,
+              error (err) {
+                console.log(err.message)
+              }
+            })
           }
         })
       }
-    } else {
-      if (file.type !== 'image/jpeg' && file.type !== 'image/jpg') {
-        this.$toast.fail('请上传 jpg、jpeg 格式图片')
-        reject()
-      }
-      new Compressor(file, {
-        success: resolve,
-        error (err) {
-          console.log(err.message)
-        }
-      })
-    }
-  })
-},
+    },
 ```
 ## afterRead
 ```js
@@ -125,16 +143,32 @@ beforeRead (file) {
     blobToFile (file) {
       return new window.File([file.file], file.file.name, { type: file.file.type })
     },
-    // 上传
     async uploadImg (file) {
       try {
-        console.log('file1', file)
-        //被Compressor插件处理过file，file.file会转成blob类型，此时进行转为file
-        const response = await this.blobToFile(file)
-        file.file = response
+        if (this.phoneType !== 'ios') {
+          const response = await this.blobToFile(file)
+          console.log('response', response.name)
+          file.file = response
+        }
         // file.file = base64TOfile(response, file.file.name)
         const param = new FormData()
         param.append('file', file.file)
+        const investigate = getItem('investigate')
+        const taskno = decrypt(investigate.taskno)
+        const surveyPoint = getItem('surveyPoint')
+        const dispatchno = decrypt(surveyPoint.dispatchno)
+        const surveyId = decrypt(surveyPoint.surveyId)
+        param.append('taskno', taskno)
+        param.append('casepoint', dispatchno)
+        param.append('casepointedno', surveyId)
+        let punchtype
+        if (this.clockType === '01') {
+          punchtype = '01'
+        } else if (this.clockType === '02') {
+          punchtype = '02'
+        }
+        param.append('punchtype', punchtype)
+        param.append('punchlocal', this.address.addr)
         const that = this
         uploadSurveyAnnexNew(param).then((res) => {
           if (res.status === '1') {
@@ -144,11 +178,13 @@ beforeRead (file) {
                 v.status = 'success'
                 v.message = ''
                 v.content = `data:image/jpeg;base64,${res.data.filePath}`
+                v.attachmentNo = res.data.bussinessNo[i]
               })
             } else {
               file.status = 'success'
               file.message = ''
               file.content = `data:image/jpeg;base64,${res.data.filePath}`
+              file.attachmentNo = res.data.bussinessNo
             }
           } else {
             file.status = 'failed'
@@ -159,7 +195,7 @@ beforeRead (file) {
       } catch (error) {
         console.log(error)
       }
-    },    
+    },
 
 ```
 ## clickPreview 点击缩略图预览原图
