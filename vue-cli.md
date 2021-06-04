@@ -30,3 +30,5 @@ module.exports = {
 }
 
 ```
+
+## vue-cli已经默认配置了一些打包优化配置
