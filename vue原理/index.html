@@ -32,6 +32,19 @@
 <script type="text/javascript" src="./observer.js"></script>
 <script type="text/javascript" src="./myvue.js"></script>
 <script>
+/**
+ * 1、编译模板
+    * 创建MyVue类，根据el属性获取到dom；；
+    * 创建fragment，将el所在的dom添加到fragment中，减少渲染成本；
+    * 编译模板，根据指定的语法规则，绑定样式、类、以及监听的方法，并获取data中的数据；
+    * 将fragment添加到el所在的节点；
+ * 2、data数据改变驱动视图更新
+    * 编译模板中，每一个节点中绑定的数据赋值时，添加了一个观察者Watch，watch中获取旧值保存起来之前，此时把当前观察者赋值给观察者收集器的target；
+    * 监控data数据改变的类Observer，利用defineProperty的get和set，当获取data中的值，get触发，此时把当前观察者（观察者收集器的target）添加到观察者收集器中；
+    * 当给data重新赋值时，触发set，此时通知给观察者收集器，观察者收集器遍历每一个观察者的update方法
+    * 观察者update方法中，比较新值与旧值，如果不一致，就调用回调函数，回调函数会改变当前dom的属性值。
+ * 
+* */
 const vm = new MyVue({
   el:'#app',
   data:{
