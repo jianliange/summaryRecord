@@ -107,3 +107,8 @@ vue监听里面添加的变量，只要加了deep深度监听，变量改变了�
 
 解决方案：
 为避免出现类似问题，后端每次发布都清除掉radis中用户token，这样用户token失效，返回401状态码，前端就会根据401状态码重定向到登录页，并刷新页面。实现用户使用新版本前端问题
+
+## module in (webpack)/lib/NormalModule.js, (webpack)/lib/node/NodeTargetPlugin.js
+项目启动报这个错
+发现文件中莫名添加了这行代码 import  { debug } from "webpack"
+去掉这行代码就行了
