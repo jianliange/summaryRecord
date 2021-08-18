@@ -245,3 +245,5 @@ accept=".jpg,.jpeg" 改为 accept="image/jpg,image/jpeg"
       }
     },
 ```
+# van-overlay遮罩层里面的内容超出无法滚动
+解决：添加属性  :lock-scroll="false"
