@@ -164,9 +164,111 @@ app.component('my-component', {
 ```
 
 ### 多个 v-model 绑定
- emits: ['update:firstName', 'update:lastName'],
+ emits: ['update:firstName', 'update:lastName']
+ ```js
+ const UserName = {
+  props: {
+    firstName: String,
+    lastName: String
+  },
+  template: `
+    <input 
+      type="text"
+      :value="firstName"
+      @input="$emit('update:firstName', $event.target.value)">
 
-## 来自 @vue/runtime-core 的 createRenderer API 创建## 自定义渲染器
+    <input
+      type="text"
+      :value="lastName"
+      @input="$emit('update:lastName', $event.target.value)">
+  `
+};
+
+const HelloVueApp = {
+  components: {
+    UserName,
+  },
+  data() {
+    return {
+      firstName: 'John',
+      lastName: 'Doe',
+    };
+  },
+};
+
+Vue.createApp(HelloVueApp).mount('#v-model-example')
+ ```
+
+### 处理 v-model 修饰符
+v-model 有内置修饰符——.trim、.number 和 .lazy。但是，在某些情况下，你可能还需要添加自己的自定义修饰符。
+示例：
+自定义修饰符 capitalize，它将 v-model 绑定提供的字符串的第一个字母大写。
+添加到组件 v-model 的修饰符将通过 modelModifiers prop 提供给组件。在下面的示例中，我们创建了一个组件，其中包含默认为空对象的 modelModifiers prop。
+
+请注意，当组件的 created 生命周期钩子触发时，modelModifiers prop 会包含 capitalize，且其值为 true——因为 capitalize 被设置在了写为 v-model.capitalize="myText" 的 v-model 绑定上。
+现在我们已经设置了 prop，我们可以检查 modelModifiers 对象键并编写一个处理器来更改发出的值。在下面的代码中，每当 <input/> 元素触发 input 事件时，我们都将字符串大写。
+```html
+<div id="app">
+  <my-component v-model.capitalize="myText"></my-component>
+  {{ myText }}
+</div>
+```
+```js
+const app = Vue.createApp({
+  data() {
+    return {
+      myText: ''
+    }
+  }
+})
+
+app.component('my-component', {
+  props: {
+    modelValue: String,
+    modelModifiers: {
+      default: () => ({})
+    }
+  },
+  emits: ['update:modelValue'],
+  methods: {
+    emitValue(e) {
+      let value = e.target.value
+      if (this.modelModifiers.capitalize) {
+        value = value.charAt(0).toUpperCase() + value.slice(1)
+      }
+      this.$emit('update:modelValue', value)
+    }
+  },
+  template: `<input
+    type="text"
+    :value="modelValue"
+    @input="emitValue">`
+})
+
+app.mount('#app')
+```
+对于带参数的 v-model 绑定，生成的 prop 名称将为 arg + "Modifiers"：
+```js
+<my-component v-model:description.capitalize="myText"></my-component>
+
+app.component('my-component', {
+  props: ['description', 'descriptionModifiers'],
+  emits: ['update:description'],
+  template: `
+    <input type="text"
+      :value="description"
+      @input="$emit('update:description', $event.target.value)">
+  `,
+  created() {
+    console.log(this.descriptionModifiers) // { capitalize: true }
+  }
+})
+
+```
+
+## 来自 @vue/runtime-core 的 createRenderer API 创建自定义渲染器
+
+
 ## 单文件组件组合式 API 语法糖 (<script setup>) 实验性
 ## 单文件组件状态驱动的 CSS 变量 (<style> 中的 v-bind) 实验性
 ## SFC <style scoped> 现在可以包含全局规则或只针对插槽内容的规则
@@ -177,19 +279,250 @@ app.component('my-component', {
 
 ## 全局 API
 ### 全局 Vue API 已更改为使用应用程序实例
+v2.0问题：
+从同一个 Vue 构造函数创建的每个根实例共享相同的全局配置，
+#### 一个新的全局 API：createApp
+```js
+import { createApp } from 'vue'
+const app = createApp({})
+```
+####  config.productionTip 移除
+#### config.ignoredElements 替换为 config.isCustomElement
+#### Vue.prototype 替换为 config.globalProperties
+#### Vue.extend 移除
+#### 插件使用者须知
+由于 use 全局 API 在 Vue 3 中不再使用，此方法将停止工作并停止调用 Vue.use() 现在将触发警告，于是，开发者必须在应用程序实例上显式指定使用此插件：
+```js
+const app = createApp(MyApp)
+app.use(VueRouter)
+```
+#### 挂载 App 实例
+使用 createApp(/* options */) 初始化后，应用实例 app 可用 app.mount(domTarget) 挂载根组件实例：
+```js
+import { createApp } from 'vue'
+import MyApp from './MyApp.vue'
+
+const app = createApp(MyApp)
+app.mount('#app')
+```
+组件和指令将被改写为如下内容
+```js
+const app = createApp(MyApp)
+
+app.component('button-counter', {
+  data: () => ({
+    count: 0
+  }),
+  template: '<button @click="count++">Clicked {{ count }} times.</button>'
+})
+
+app.directive('focus', {
+  mounted: el => el.focus()
+})
+
+// 现在，所有通过 `app.mount()` 挂载的应用实例及其组件树，将具有相同的 “button-counter” 组件和 “focus” 指令，而不会污染全局环境
+app.mount('#app')
+```
+#### Provide / Inject
+与在 2.x 根实例中使用 provide 选项类似，Vue 3 应用实例也提供了可被应用内任意组件注入的依赖项：
+```js
+// 在入口
+app.provide('guide', 'Vue 3 Guide')
+
+// 在子组件
+export default {
+  inject: {
+    book: {
+      from: 'guide'
+    }
+  },
+  template: `<div>{{ book }}</div>`
+}
+```
+#### 在应用之间共享配置
+在应用之间共享配置 (如组件或指令) 的一种方法是创建工厂函数，如下所示：
+```js
+import { createApp } from 'vue'
+import Foo from './Foo.vue'
+import Bar from './Bar.vue'
+
+const createMyApp = options => {
+  const app = createApp(options)
+  app.directive('focus' /* ... */)
+
+  return app
+}
+
+createMyApp(Foo).mount('#foo')
+createMyApp(Bar).mount('#bar')
+```
 
 ### 全局和内部 API 已经被重构可tree-shakable
+ webpack 这样的模块打包工具支持 tree-shaking，这是表达“死代码消除”的一个花哨术语
+#### 受影响的 API
+Vue 2.x 中的这些全局 API 受此更改的影响：
+
+- Vue.nextTick
+- Vue.observable (用 Vue.reactive 替换)
+- Vue.version
+- Vue.compile (仅完整构建版本)
+- Vue.set (仅兼容构建版本)
+- Vue.delete (仅兼容构建版本)
+
+#### 内部帮助器
+#### 插件中的用法
+vue2.0
+```js
+const plugin = {
+  install: Vue => {
+    Vue.nextTick(() => {
+      // ...
+    })
+  }
+}
+```
+vue3.0
+```js
+import { nextTick } from 'vue'
+
+const plugin = {
+  install: app => {
+    nextTick(() => {
+      // ...
+    })
+  }
+}
+```
+如果使用 webpack 这样的模块打包工具，这可能会导致 Vue 的源代码输出打包到插件中，而且通常情况下，这并不是你所期望的。防止这种情况发生的一种常见做法是配置模块打包工具以将 Vue 从最终的打包产物中排除。对于 webpack，你可以使用 `externals` 配置选项：
+这将告诉 webpack 将 Vue 模块视为一个外部库，而不将它打包进来。
+```js
+// webpack.config.js
+module.exports = {
+  /*...*/
+  externals: {
+    vue: 'Vue'
+  }
+}
+```
 
 ## 模板指令
 ### 组件上 v-model 用法已更改，替换 v-bind.sync
+- 非兼容：用于自定义组件时，v-model prop 和事件默认名称已更改：
+- prop：value -> modelValue；
+- event：input -> update:modelValue；
+- 非兼容：v-bind 的 .sync 修饰符和组件的 model 选项已移除，可用 v-model 作为代替；
+- 新增：现在可以在同一个组件上使用多个 v-model 进行双向绑定；
+- 新增：现在可以自定义 v-model 修饰符。
+
+在 2.x 中，在组件上使用 v-model 相当于绑定 value prop 和 input 事件
+#### 使用 v-bind.sync
+在某些情况下，我们可能需要对某一个 prop 进行“双向绑定”(除了前面用 v-model 绑定 prop 的情况)。为此，我们建议使用 update:myPropName 抛出事件。 
+
+
 ### <template v-for> 和非 v-for 节点上 key 用法已更改
+#### 结合 <template v-for>
+在 Vue 2.x 中 <template> 标签不能拥有 key。不过你可以为其每个子节点分别设置 key。
+在 Vue 3.x 中 key 则应该被设置在 <template> 标签上。
+
 ### 在同一元素上使用的 v-if 和 v-for 优先级已更改
+3.x 版本中 v-if 总是优先于 v-for 生效。
+
 ### v-bind="object" 现在排序敏感
+#### 概览
+不兼容：v-bind 的绑定顺序会影响渲染结果。
+#### 介绍
+在元素上动态绑定 attribute 时，常见的场景是在一个元素中同时使用 v-bind="object" 语法和单独的 property。然而，这就引出了关于合并的优先级的问题。
+
 ### v-on:event.native 修饰符已移除
+v-on 的 .native 修饰符已被移除
+#### 2.x 语法
+默认情况下，传递给带有 v-on 的组件的事件监听器只有通过 this.$emit 才能触发。要将原生 DOM 监听器添加到子组件的根元素中，可以使用 .native 修饰符
+#### 3.x 语法
+v-on 的 .native 修饰符已被移除。同时，新增的 emits 选项允许子组件定义真正会被触发的事件。
+```html
+<my-component
+  v-on:close="handleComponentEvent"
+  v-on:click="handleNativeClickEvent"
+/>
+```
+```html
+<script>
+  export default {
+    emits: ['close']
+  }
+</script>
+```
+#### 迁移策略
+删除 .native 修饰符的所有实例。
+确保所有组件都使用 emits 选项记录其事件。
+
 ### v-for 中的 ref 不再注册 ref 数组
+在 Vue 2 中，在 v-for 里使用的 ref attribute 会用 ref 数组填充相应的 $refs property。当存在嵌套的 v-for 时，这种行为会变得不明确且效率低下。
+
+在 Vue 3 中，这样的用法将不再在 $ref 中自动创建数组。要从单个绑定获取多个 ref，请将 ref 绑定到一个更灵活的函数上 (这是一个新特性)
+```html
+<div v-for="item in list" :ref="setItemRef"></div>
+```
+结合选项式 API:
+```js
+export default {
+  data() {
+    return {
+      itemRefs: []
+    }
+  },
+  methods: {
+    setItemRef(el) {
+      if (el) {
+        this.itemRefs.push(el)
+      }
+    }
+  },
+  beforeUpdate() {
+    this.itemRefs = []
+  },
+  updated() {
+    console.log(this.itemRefs)
+  }
+}
+```
+结合组合式 API:
+```js
+import { onBeforeUpdate, onUpdated } from 'vue'
+
+export default {
+  setup() {
+    let itemRefs = []
+    const setItemRef = el => {
+      if (el) {
+        itemRefs.push(el)
+      }
+    }
+    onBeforeUpdate(() => {
+      itemRefs = []
+    })
+    onUpdated(() => {
+      console.log(itemRefs)
+    })
+    return {
+      setItemRef
+    }
+  }
+}
+```
+注意：
+
+itemRefs 不必是数组：它也可以是一个对象，其 ref 会通过迭代的 key 被设置。
+
+如果需要，itemRef 也可以是响应式的且可以被监听。
 
 ## 组件
 ### 只能使用普通函数创建功能组件
+在 3.x 中，函数式组件 2.x 的性能提升可以忽略不计，因此我们建议只使用有状态的组件
+函数式组件只能使用接收 props 和 context 的普通函数创建 (即：slots，attrs，emit)。
+`非兼容变更`：functional attribute 在单文件组件 (SFC) <template> 已被移除
+`非兼容变更`：{ functional: true } 选项在通过函数创建组件已被移除
+
 ### functional 属性在单文件组件 (SFC) <template> 和 functional ## 组件选项被抛弃
 ### 异步组件现在需要 defineAsyncComponent 方法来创建
 ### 组件事件现在需要在 emits 选项中声明
