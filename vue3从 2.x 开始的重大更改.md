@@ -523,20 +523,477 @@ itemRefs 不必是数组：它也可以是一个对象，其 ref 会通过迭代
 `非兼容变更`：functional attribute 在单文件组件 (SFC) <template> 已被移除
 `非兼容变更`：{ functional: true } 选项在通过函数创建组件已被移除
 
-### functional 属性在单文件组件 (SFC) <template> 和 functional ## 组件选项被抛弃
+### functional 属性在单文件组件 (SFC) <template> 和 functional组件选项被抛弃
+- v2.x
+```js
+<!-- Vue 2 函数式组件示例使用 <template> -->
+<template functional>
+  <component
+    :is="`h${props.level}`"
+    v-bind="attrs"
+    v-on="listeners"
+  />
+</template>
+
+<script>
+export default {
+  props: ['level']
+}
+</script>
+```
+- v3.x
+```js
+<template>
+  <component
+    v-bind:is="`h${$props.level}`"
+    v-bind="$attrs"
+  />
+</template>
+
+<script>
+export default {
+  props: ['level']
+}
+</script>
+```
+主要的区别在于：
+
+- functional attribute 在 <template> 中移除
+- listeners 现在作为 $attrs 的一部分传递，可以将其删除
+
+
 ### 异步组件现在需要 defineAsyncComponent 方法来创建
+#### 异步组件（新增）
+- 新的 defineAsyncComponent 助手方法，用于显式地定义异步组件
+- component 选项被重命名为 loader
+- Loader 函数本身不再接收 resolve 和 reject 参数，且必须返回一个 Promise
+##### 介绍
+以前，异步组件是通过将组件定义为返回 Promise 的函数来创建的，例如：
+```js
+const asyncModal = () => import('./Modal.vue')
+```
+或者，对于带有选项的更高阶的组件语法：
+```js
+const asyncModal = {
+  component: () => import('./Modal.vue'),
+  delay: 200,
+  timeout: 3000,
+  error: ErrorComponent,
+  loading: LoadingComponent
+}
+```
+##### 3.x语法
+现在，在 Vue 3 中，由于函数式组件被定义为纯函数，因此异步组件需要通过将其包裹在新的 defineAsyncComponent 助手方法中来显式地定义：
+```js
+import { defineAsyncComponent } from 'vue'
+import ErrorComponent from './components/ErrorComponent.vue'
+import LoadingComponent from './components/LoadingComponent.vue'
+
+// 不带选项的异步组件
+const asyncModal = defineAsyncComponent(() => import('./Modal.vue'))
+
+// 带选项的异步组件
+const asyncModalWithOptions = defineAsyncComponent({
+  loader: () => import('./Modal.vue'),
+  delay: 200,
+  timeout: 3000,
+  errorComponent: ErrorComponent,
+  loadingComponent: LoadingComponent
+})
+```
+> 注意： Vue Router 支持一个类似的机制来异步加载路由组件，也就是俗称的懒加载。尽管类似，但是这个功能和 Vue 所支持的异步组件是不同的。`当用 Vue Router 配置路由组件时，你不应该使用 defineAsyncComponent`。你可以在 Vue Router 文档的懒加载路由章节阅读更多相关内容。
+
+- component 选项现在被重命名为 loader，以明确组件定义不能直接被提供。
+- 与 2.x 不同，loader 函数不再接收 resolve 和 reject 参数，且必须始终返回 Promise。
+```js
+// 2.x 版本
+const oldAsyncComponent = (resolve, reject) => {
+  /* ... */
+}
+
+// 3.x 版本
+const asyncComponent = defineAsyncComponent(
+  () =>
+    new Promise((resolve, reject) => {
+      /* ... */
+    })
+)
+```
+
 ### 组件事件现在需要在 emits 选项中声明
+#### emits (新增)
+##### 概述
+Vue 3 目前提供一个 `emits` 选项，`和现有的 props 选项类似`。这个选项可以用来定义组件可以向其父组件触发的事件。
+##### 2.x 的行为
+在 Vue 2 中，你可以定义一个组件可接收的 prop，但是你无法声明它可以触发哪些事件：
+```js
+<template>
+  <div>
+    <p>{{ text }}</p>
+    <button v-on:click="$emit('accepted')">OK</button>
+  </div>
+</template>
+<script>
+  export default {
+    props: ['text']
+  }
+</script>
+```
+##### 3.x 的行为
+和 prop 类似，组件可触发的事件可以通过 emits 选项被定义：
+```js
+<template>
+  <div>
+    <p>{{ text }}</p>
+    <button v-on:click="$emit('accepted')">OK</button>
+  </div>
+</template>
+<script>
+  export default {
+    props: ['text'],
+    emits: ['accepted']
+  }
+</script>
+```
+该选项也可以接收一个对象，该对象允许开发者定义传入事件参数的验证器，和 props 定义里的验证器类似。
+##### 迁移策略
+强烈建议使用 emits 记录每个组件所触发的所有事件。
+
+这尤为重要，因为我们`移除`了 v-on.native `修饰符`。任何未声明 emits 的事件监听器都会被算入组件的 $attrs 并绑定在组件的根节点上
+
+##### 示例
+对于向父组件重复触发原生事件的组件来说，这会导致两个事件被触发：
+```js
+<template>
+  <button v-on:click="$emit('click', $event)">OK</button>
+</template>
+<script>
+export default {
+  emits: [] // 不声明事件
+}
+</script>
+```
+当一个父级组件拥有 `click` 事件的监听器时：
+```js
+<my-button v-on:click="handleClick"></my-button>
+```
+该事件会被触发两次:
+- 一次来自 $emit()。
+- 另一次来自应用在根元素上的原生事件监听器。
+
+现在你有两个选项：
+1. 合理声明 click 事件。如果你真的在 <my-button> 的事件处理器上加入了一些逻辑，这会很有用。
+2. 移除重复触发的事件，因为父组件可以很容易地监听原生事件而不需要添加 .native。适用于你只想重新触发这个事件。
+
 
 ## 渲染函数
 ### 渲染函数 API 改变
+此更改不会影响 <template> 用户。
+
+以下是更改的简要总结：
+- h 现在是全局导入，而不是作为参数传递给渲染函数
+- 更改渲染函数参数，使其在有状态组件和函数组件的表现更加一致
+- VNode 现在有一个扁平的 prop 结构
+#### 渲染函数参数
+- 2.x语法
+在 2.x 中，render 函数会自动接收 h 函数 (它是 createElement 的惯用别名) 作为参数：
+```js
+// Vue 2 渲染函数示例
+export default {
+  render(h) {
+    return h('div')
+  }
+}
+```
+- 3.x语法
+在 3.x 中，h 函数现在是全局导入的，而不是作为参数自动传递。
+```js
+// Vue 3 渲染函数示例
+import { h } from 'vue'
+
+export default {
+  render() {
+    return h('div')
+  }
+}
+```
+
+#### 渲染函数签名更改
+- 2.x语法
+在 2.x 中，render 函数自动接收参数，如 h 函数。
+```js
+// Vue 2 渲染函数示例
+export default {
+  render(h) {
+    return h('div')
+  }
+}
+```
+- 3.x语法
+在 3.x 中，由于 render 函数不再接收任何参数，它将主要在 setup() 函数内部使用。这还有一个好处：可以访问在作用域中声明的响应式状态和函数，以及传递给 setup() 的参数。
+```js
+import { h, reactive } from 'vue'
+
+export default {
+  setup(props, { slots, attrs, emit }) {
+    const state = reactive({
+      count: 0
+    })
+
+    function increment() {
+      state.count++
+    }
+
+    // 返回渲染函数
+    return () =>
+      h(
+        'div',
+        {
+          onClick: increment
+        },
+        state.count
+      )
+  }
+}
+```
+#### VNode Prop 格式化
+- 2.x 语法
+在 2.x 中，domProps 包含 VNode prop 中的嵌套列表：
+```js
+// 2.x
+{
+  staticClass: 'button',
+  class: { 'is-outlined': isOutlined },
+  staticStyle: { color: '#34495E' },
+  style: { backgroundColor: buttonColor },
+  attrs: { id: 'submit' },
+  domProps: { innerHTML: '' },
+  on: { click: submitForm },
+  key: 'submit-button'
+}
+```
+- 3.x语法
+在 3.x 中，整个 VNode prop 的结构都是扁平的。使用上面的例子，来看看它现在的样子。
+```js
+// 3.x 语法
+{
+  class: ['button', { 'is-outlined': isOutlined }],
+  style: [{ color: '#34495E' }, { backgroundColor: buttonColor }],
+  id: 'submit',
+  innerHTML: '',
+  onClick: submitForm,
+  key: 'submit-button'
+}
+```
+#### 注册组件
+- 2.x 语法
+在 2.x 中，注册一个组件后，把组件名作为字符串传给渲染函数的第一个参数，渲染函数可以正常的工作：
+```js
+// 2.x
+Vue.component('button-counter', {
+  data() {
+    return {
+      count: 0
+    }
+  }
+  template: `
+    <button @click="count++">
+      Clicked {{ count }} times.
+    </button>
+  `
+})
+
+export default {
+  render(h) {
+    return h('button-counter')
+  }
+}
+```
+- 3.x 语法
+在 3.x 中，由于 VNode 是上下文无关的，不能再用字符串 ID 隐式查找已注册组件。相反地，需要使用一个导入的 resolveComponent 方法：
+```js
+// 3.x
+import { h, resolveComponent } from 'vue'
+
+export default {
+  setup() {
+    const ButtonCounter = resolveComponent('button-counter')
+    return () => h(ButtonCounter)
+  }
+}
+```
+#### 工具库作者
+全局导入 h 意味着任何包含 Vue 组件的库都将在某处包含 import { h } from 'vue'。这会带来一些开销，因为它需要库作者在其构建设置中正确配置 Vue 的外部化：
+
+- Vue 不应绑定到库中
+- 对于模块构建，导入应该保持独立，由最终用户的打包器处理
+- 对于 UMD / browser 构建版本，应该首先尝试全局 Vue.h，不存在时再使用 require 调用
+
 ### $scopedSlots property 已删除，所有插槽都通过 $slots 作为函数暴露
+#### 插槽统一
+##### 概览
+此更改统一了 3.x 中的普通插槽和作用域插槽。
+
+以下是变化的变更总结：
+- this.$slots 现在将插槽作为函数公开
+- 非兼容：移除 this.$scopedSlots
+
+##### 2.x语法
+当使用渲染函数时，即 h，2.x 用于在内容节点上定义 slot 数据 property。
+```js
+// 2.x 语法
+h(LayoutComponent, [
+  h('div', { slot: 'header' }, this.header),
+  h('div', { slot: 'content' }, this.content)
+])
+```
+此外，在引用作用域插槽时，可以使用以下方法引用它们：
+```js
+// 2.x 语法
+this.$scopedSlots.header
+```
+##### 3.x语法
+在 3.x 中，将插槽定义为当前节点的子对象：
+```js
+// 3.x Syntax
+h(LayoutComponent, {}, {
+  header: () => h('div', this.header),
+  content: () => h('div', this.content)
+})
+```
+当你需要以编程方式引用作用域插槽时，它们现在被统一到 $slots 选项中。
+```js
+// 2.x 语法
+this.$scopedSlots.header
+
+// 3.x 语法
+this.$slots.header()
+```
+#### 迁移策略
+大部分更改已经在 2.6 中发布。因此，迁移可以一步到位：
+
+- 在 3.x 中，将所有 this.$scopedSlots 替换为 this.$slots。
+- 将所有 this.$slots.mySlot 替换为 this.$slots.mySlot()。
+
 ### $listeners 被移除或整合到 $attrs
+在 Vue 3 的虚拟 DOM 中，事件监听器现在只是以 on 为前缀的 attribute，这样就成了 $attrs 对象的一部分，因此 $listeners 被移除了
+```js
+<template>
+  <label>
+    <input type="text" v-bind="$attrs" />
+  </label>
+</template>
+<script>
+export default {
+  inheritAttrs: false
+}
+</script>
+```
+如果这个组件接收一个 id attribute 和一个 v-on:close 监听器，那么 $attrs 对象现在将如下所示:
+```js
+{
+  id: 'my-input',
+  onClose: () => console.log('close Event triggered')
+} 
+```
+
 ### $attrs 现在包含 class and style attribute
+$attrs 现在包含了所有传递给组件的 attribute，包括 class 和 style
+
 
 ## 自定义元素
 ### 自定义元素检测现在已经在编译时执行
+- `非兼容`：检测并确定哪些标签应该被视为自定义元素的过程，现在会在模板编译期间执行，且应该通过编译器选项而不是运行时配置来配置。
+- `非兼容`：特定 is prop 用法仅限于保留的 <component> 标记。
+- `新增`：为了支持 2.x 在原生元素上使用 is 的用例来处理原生 HTML 解析限制，我们用 vue: 前缀来解析一个 Vue 组件。
+#### 自主定制元素
+如果我们想在 Vue 外部定义添加自定义元素 (例如使用 Web 组件 API)，我们需要“指示”Vue 将其视为自定义元素。让我们以下面的模板为例。
+```html
+<plastic-button></plastic-button>
+```
+- 2.x语法
+在 Vue 2.x 中，通过 Vue.config.ignoredElements 配置自定义元素
+```js
+// 这将使Vue忽略在Vue外部定义的自定义元素
+// (例如：使用 Web Components API)
+
+Vue.config.ignoredElements = ['plastic-button']
+```
+
+- 3.x语法
+`在 Vue 3.0 中，此检查在模板编译期间执行`指示编译器将 <plastic-button> 视为自定义元素：
+
+- 如果使用生成步骤：将 isCustomElement 传递给 Vue 模板编译器，如果使用 vue-loader，则应通过 vue-loader 的 compilerOptions 选项传递：
+```js
+// webpack 中的配置
+rules: [
+  {
+    test: /\.vue$/,
+    use: 'vue-loader',
+    options: {
+      compilerOptions: {
+        isCustomElement: tag => tag === 'plastic-button'
+      }
+    }
+  }
+  // ...
+]
+```
+- 如果使用动态模板编译，请通过 app.config.isCustomElement 传递：
+```js
+const app = Vue.createApp({})
+app.config.isCustomElement = tag => tag === 'plastic-button'
+```
+需要注意的是，运行时配置只会影响运行时模板编译——它不会影响预编译的模板
+
+
 ### 对特殊的 is prop 的使用只严格限制在被保留的 <component> 标记中
-### #其他小改变
+
+#### 定制内置元素
+自定义元素规范提供了一种将自定义元素作为`自定义内置模板`的方法，方法是向内置元素添加 is 属性：
+```html
+<button is="plastic-button">点击我!</button>
+```
+Vue 对 is 特殊 prop 的使用是在模拟 native attribute 在浏览器中普遍可用之前的作用。但是，`在 2.x 中，它被解释为渲染一个名为 plastic-button 的 Vue 组件`，这将阻止上面提到的自定义内置元素的原生使用。
+在 3.0 中，我们仅将 Vue 对 is 属性的特殊处理限制到 <component> tag。
+- 在保留的 <component> tag 上使用时，它的行为将与 2.x 中完全相同；
+- 在普通组件上使用时，它的行为将类似于普通 prop：
+```html
+<foo is="bar" />
+```
+  - 2.x 行为：渲染 bar 组件。
+  - 3.x 行为：通过 is prop 渲染 foo 组件。
+
+在普通元素上使用时，它将作为 is prop 传递给 createElement 调用，并作为原生 attribute 渲染，这支持使用自定义的内置元素。
+```html
+<button is="plastic-button">点击我！</button>
+```
+  - 2.x 行为：渲染 plastic-button 组件。
+  - 3.x 行为：通过回调渲染原生的 button。
+  ```js
+  document.createElement('button', { is: 'plastic-button' })
+  ```
+#### vue: 用于 DOM 内模板解析解决方案
+> 提示：本节仅影响直接在页面的 HTML 中写入 Vue 模板的情况。 在 DOM 模板中使用时，模板受原生 HTML 解析规则的约束。一些 HTML 元素，例如 <ul>，<ol>，<table> 和 <select> 对它们内部可以出现的元素有限制，和一些像 <li>，<tr>，和 <option> 只能出现在某些其他元素中。
+
+- 2.x 语法
+在 Vue 2 中，我们建议在原生 tag 上使用 is prop 来解决这些限制：
+```html
+<table>
+  <tr is="blog-post-row"></tr>
+</table>
+```
+- 3.x 语法
+随着 is 的行为变化，现在将元素解析为一个 Vue 组件需要 vue: 前缀：
+```html
+<table>
+  <tr is="vue:blog-post-row"></tr>
+</table>
+
+```
+
+
+## 其他小改变
 ### destroyed 生命周期选项被重命名为 unmounted
 ### beforeDestroy 生命周期选项被重命名为 beforeUnmount
 ### default prop 工厂函数不再可以访问 this 上下文
